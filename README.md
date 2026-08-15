@@ -4,7 +4,7 @@
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An end-to-end deep learning framework that learns custom photographic editing styles from paired RAW and edited photo datasets. Instead of producing destructive, flat RGB images, **photo-AI-editor** predicts structured non-destructive editing parameters and localized spatial masks, exporting fully editable **layered PSD/XCF project files** compatible with Photoshop, GIMP, and Affinity Photo.
+An end-to-end deep learning framework that learns custom photographic editing styles from paired images and native project files (GIMP/Photoshop). Instead of producing destructive, flat RGB images, **photo-AI-editor** predicts structured non-destructive editing parameters and localized spatial masks, exporting fully editable **layered PSD/XCF project files** compatible with Photoshop, GIMP, and Affinity Photo.
 
 ---
 
@@ -12,41 +12,45 @@ An end-to-end deep learning framework that learns custom photographic editing st
 
 Most deep learning models for image editing (e.g., Image-to-Image GANs, Diffusion Models) act as "black box" pixel generators. While effective, they introduce visual artifacts, alter fine textures, and output flattened images that photographers cannot easily tweak or refine.
 
-**photo-AI-editor** bridges machine learning and professional photo editing workflows by adopting a **Hybrid Parametric Approach**:
+**photo-AI-editor** bridges machine learning and professional photo editing workflows by adopting a **Hybrid Supervised & Parametric Approach**:
 
-* **Non-Destructive Output:** Predicts numeric slider parameters (exposure, white balance, RGB tone curves, HSL shifts) and spatial region masks rather than raw pixels.
+* **Direct Parameter Supervision:** Learns directly from the layer settings (exposure, contrast, tone curves, color balance) and layer masks stored inside your native GIMP/PSD edit files.
+* **Non-Destructive Output:** Predicts numeric slider parameters and spatial region masks rather than raw pixels.
 * **Layered File Export:** Generates standard `.psd` (or `.xcf`) files with separate adjustment layers, custom opacities, blend modes, and embedded layer masks.
-* **Full Resolution Independence:** Network inference operates on downsampled thumbnails ($256 \times 256$) for extreme execution speed, while predicted parametric curves scale losslessly to high-res $45\text{MP}+$ RAW files.
+* **Full Resolution Independence:** Network inference operates on downsampled thumbnails ($256 \times 256$) for extreme execution speed, while predicted parametric curves scale losslessly to high-res images.
 * **Human-in-the-Loop Workflow:** Provides an automated $90\%$ visual baseline while preserving complete creative control for manual fine-tuning.
 
 ---
 
 ## 🏗 System Architecture
 
-The pipeline consists of three distinct modules: a **Dual-Head Neural Network**, a **Differentiable PyTorch Renderer**, and a **Parametric PSD/XCF Exporter**.
+The pipeline consists of four distinct modules: a **Metadata & Layer Parser**, a **Dual-Head Neural Network**, a **Differentiable PyTorch Renderer**, and a **Parametric PSD/XCF Exporter**.
 
 ```
-                           ┌──► Global Parameter Head (MLP) ──► Parameter Vector θ
-                           │                                          │
-Downsampled RAW Image ─────┤                                          ├─► Differentiable Renderer ─► Rendered Image ─► Loss
-(256x256x3)                │                                          │   (Training Mode)
-                           └──► Local Mask Head (U-Net)  ──► Masks (M) ┘
-                                                                      │
-                                                                      └─► Layered PSD Exporter ──► Editable .PSD / .XCF
-                                                                          (Inference Mode)
+                           ┌──► Global Parameter Head (MLP) ──► Parameter Vector θ ──┐
+                           │                                                          ├─► Hybrid Loss (θ + Masks + Image)
+Input Image (256x256x3) ───┤                                                          │
+                           └──► Local Mask Head (U-Net)  ──► Masks (M) ──────────────┤
+                                                                                      │
+                                                                                      ├─► Differentiable Renderer (Preview)
+                                                                                      │
+                                                                                      └─► Layered PSD Exporter ──► Editable .PSD / .XCF
 ```
 
-### 1. Dual-Head Parameter Network
+### 1. Layer & Metadata Parser (Preprocessing)
+Extracts exact numerical layer parameters (saved to `.json`) and layer masks (saved as grayscale `.png` images) directly from your edited GIMP (`.xcf`) or Photoshop (`.psd`) source files.
+
+### 2. Dual-Head Parameter Network
 * **Shared Encoder Backbone:** A lightweight convolutional network (e.g., ResNet-18 / MobileNetV3) extracts global color, contrast, and spatial layout features.
-* **Global Parameter Head:** A Multi-Layer Perceptron (MLP) with bounded activations outputs a normalized parameter vector $\vec{\theta} \in \mathbb{R}^N$ representing global slider positions (Exposure, Contrast, Temp, Tint, RGB Curves, HSL).
-* **Local Mask Head:** A lightweight transposed-convolution decoder generates single-channel grayscale spatial masks $M_k \in [0, 1]^{H \times W}$ for region-specific adjustments (e.g., subject isolation, sky gradients, vignette).
+* **Global Parameter Head:** A Multi-Layer Perceptron (MLP) outputs a normalized parameter vector $\vec{\theta} \in \mathbb{R}^N$ matching your GIMP layer settings.
+* **Local Mask Head:** A lightweight transposed-convolution decoder generates single-channel grayscale spatial masks $M_k \in [0, 1]^{H \times W}$ matching your GIMP layer masks.
 
-### 2. Differentiable PyTorch Renderer (Training Phase)
-During training, backpropagation requires evaluating how parameter updates impact output image quality. The Differentiable Renderer executes standard photo-editing mathematics natively inside PyTorch computational graphs:
-$$\hat{I} = \text{Render}(X, \vec{\theta}, M_1, \dots, M_K)$$
+### 3. Differentiable PyTorch Renderer & Hybrid Loss (Training Phase)
+Training combines direct parameter supervision with rendered image verification:
+$$\mathcal{L}_{\text{total}} = \lambda_1 \|\vec{\theta}_{\text{pred}} - \vec{\theta}_{\text{target}}\|_2^2 + \lambda_2 \|M_{\text{pred}} - M_{\text{target}}\|_1 + \lambda_3 \|\hat{I} - Y\|_1$$
 
-### 3. Layered File Exporter (Inference Phase)
-During inference, the neural renderer is bypassed. The model outputs raw numeric parameters and grayscale mask tensors, which a Python export script compiles into a native layered `.psd` file using `psd-tools`.
+### 4. Layered File Exporter (Inference Phase)
+During inference, the predicted parameters $\vec{\theta}$ and spatial masks $M$ are mapped into a newly assembled `.psd` file containing non-destructive adjustment layers.
 
 ---
 
@@ -55,12 +59,14 @@ During inference, the neural renderer is bypassed. The model outputs raw numeric
 ```
 photo-ai-editor/
 ├── data/
-│   ├── raw/             # Unedited original RAW/flat files (.jpg)
-│   ├── edited/          # Final ground-truth edits (.jpg, .png)
-│   └── processed/       # Downsampled & aligned pair cache (256x256)
+│   ├── raw/             # Original unedited images (.jpg, .png)
+│   ├── edited/          # Source edit project files (.xcf, .psd) or target exports (.jpg, .png)
+│   └── processed/       # Extracted layer parameter JSONs, target masks, and downsampled pairs
 ├── src/
-│   ├── dataset.py       # PyTorch Dataset loader & RawPy processing
-│   ├── models.py        # ResNet dual-head network architecture
+│   ├── config.py        # Centralized paths, slider bounds, and hyperparameters
+│   ├── parse_gimp.py    # Preprocessing script to extract parameters/masks from GIMP/PSD files
+│   ├── dataset.py       # PyTorch Dataset loader for images, JSON targets, and masks
+│   ├── models.py        # Dual-head network architecture
 │   ├── renderer.py      # Differentiable parameter rendering ops
 │   └── export_psd.py    # Parameter-to-PSD translation engine
 ├── notebooks/
@@ -86,7 +92,7 @@ photo-ai-editor/
 
 ```bash
 # Clone the repository
-git clone https://github.com/AntnioB/photo-ai-editor.git
+git clone https://github.com/YOUR-USERNAME/photo-ai-editor.git
 cd photo-ai-editor
 
 # Create virtual environment
@@ -122,27 +128,28 @@ python -m ipykernel install --user --name=photo-ai-env --display-name "Python (p
 
 ## 🚀 Quickstart Workflow
 
-### Step 1: Prepare Paired Dataset
-Place your unedited RAW photos in `data/raw/` and corresponding edited ground-truth images in `data/edited/` using identical filenames:
+### Step 1: Prepare Dataset
+Place unedited photos in `data/raw/` and corresponding GIMP/Photoshop files in `data/edited/` using matching basenames:
 ```
 data/raw/photo_001.jpg
-data/edited/photo_001.jpg
+data/edited/photo_001.xcf
 ```
 
-### Step 2: Run Dataset Alignment & Cache
-Generate downsampled, aligned paired thumbnails for high-speed model training:
+### Step 2: Parse Layers & Preprocess Data
+Extract parameter targets (`.json`) and layer masks (`.png`), then cache downsampled image pairs:
 ```bash
+python src/parse_gimp.py
 python src/dataset.py --preprocess --size 256
 ```
 
 ### Step 3: Train Model
-Train the dual-head network using combined $L_1$ pixel loss and VGG perceptual loss:
+Train using direct parameter loss, mask loss, and perceptual image rendering loss:
 ```bash
 python src/train.py --epochs 100 --batch-size 16 --lr 1e-4
 ```
 
 ### Step 4: Run Inference & Generate Layered PSD
-Pass a new, unseen RAW image through the trained model to output a non-destructive PSD project:
+Pass an unedited image through the trained model to generate an editable `.psd` project:
 ```bash
 python src/export_psd.py --input data/raw/sample.jpg --output outputs/sample_edit.psd
 ```
