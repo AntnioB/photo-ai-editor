@@ -1,10 +1,10 @@
-# DeepEdit AI: Parametric & Layered Image Style Transfer
+# photo-AI-editor: Parametric & Layered Image Style Transfer
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyTorch 2.0+](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c.svg)](https://pytorch.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An end-to-end deep learning framework that learns custom photographic editing styles from paired RAW and edited photo datasets. Instead of producing destructive, flat RGB images, **DeepEdit AI** predicts structured non-destructive editing parameters and localized spatial masks, exporting fully editable **layered PSD/XCF project files** compatible with Photoshop, GIMP, and Affinity Photo.
+An end-to-end deep learning framework that learns custom photographic editing styles from paired RAW and edited photo datasets. Instead of producing destructive, flat RGB images, **photo-AI-editor** predicts structured non-destructive editing parameters and localized spatial masks, exporting fully editable **layered PSD/XCF project files** compatible with Photoshop, GIMP, and Affinity Photo.
 
 ---
 
@@ -12,7 +12,7 @@ An end-to-end deep learning framework that learns custom photographic editing st
 
 Most deep learning models for image editing (e.g., Image-to-Image GANs, Diffusion Models) act as "black box" pixel generators. While effective, they introduce visual artifacts, alter fine textures, and output flattened images that photographers cannot easily tweak or refine.
 
-**DeepEdit AI** bridges machine learning and professional photo editing workflows by adopting a **Hybrid Parametric Approach**:
+**photo-AI-editor** bridges machine learning and professional photo editing workflows by adopting a **Hybrid Parametric Approach**:
 
 * **Non-Destructive Output:** Predicts numeric slider parameters (exposure, white balance, RGB tone curves, HSL shifts) and spatial region masks rather than raw pixels.
 * **Layered File Export:** Generates standard `.psd` (or `.xcf`) files with separate adjustment layers, custom opacities, blend modes, and embedded layer masks.
@@ -55,7 +55,7 @@ During inference, the neural renderer is bypassed. The model outputs raw numeric
 ```
 photo-ai-editor/
 ├── data/
-│   ├── raw/             # Unedited original RAW/flat files (.CR2, .NEF, .ARW, .dng)
+│   ├── raw/             # Unedited original RAW/flat files (.jpg)
 │   ├── edited/          # Final ground-truth edits (.jpg, .png)
 │   └── processed/       # Downsampled & aligned pair cache (256x256)
 ├── src/
@@ -86,7 +86,7 @@ photo-ai-editor/
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR-USERNAME/photo-ai-editor.git
+git clone https://github.com/AntnioB/photo-ai-editor.git
 cd photo-ai-editor
 
 # Create virtual environment
@@ -106,7 +106,7 @@ source .venv/bin/activate.fish
 pip install --upgrade pip
 
 # Install PyTorch with CUDA 12.1 support
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip3 install torch torchvision --index-url https://download.pytorch.org/whl/cu126
 
 # Install computer vision, RAW parsing, and PSD export utilities
 pip install rawpy opencv-python pillow psd-tools numpy matplotlib tqdm jupyter ipykernel
@@ -125,8 +125,8 @@ python -m ipykernel install --user --name=photo-ai-env --display-name "Python (p
 ### Step 1: Prepare Paired Dataset
 Place your unedited RAW photos in `data/raw/` and corresponding edited ground-truth images in `data/edited/` using identical filenames:
 ```
-data/raw/photo_001.ARW
-data/edited/photo_001.png
+data/raw/photo_001.jpg
+data/edited/photo_001.jpg
 ```
 
 ### Step 2: Run Dataset Alignment & Cache
@@ -144,7 +144,7 @@ python src/train.py --epochs 100 --batch-size 16 --lr 1e-4
 ### Step 4: Run Inference & Generate Layered PSD
 Pass a new, unseen RAW image through the trained model to output a non-destructive PSD project:
 ```bash
-python src/export_psd.py --input data/raw/sample.ARW --output outputs/sample_edit.psd
+python src/export_psd.py --input data/raw/sample.jpg --output outputs/sample_edit.psd
 ```
 
 Open `outputs/sample_edit.psd` in **GIMP**, **Photoshop**, or **Affinity Photo** to inspect and fine-tune individual layers.
