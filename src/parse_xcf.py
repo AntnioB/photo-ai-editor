@@ -66,6 +66,8 @@ def extract_filter_properties(flt):
     return properties
 
 
+#Run on a single file
+#gimp -i --quit --batch-interpreter python-fu-eval -b "import sys; sys.path.append('src'); import parse_xcf; parse_xcf.parse_single_file('data/edited/edit_3753.xcf')"
 def parse_single_file(xcf_path):
     """Extracts DrawableFilter slider parameters into data/processed/*.json."""
     project_root = os.path.abspath(
@@ -127,3 +129,27 @@ def parse_single_file(xcf_path):
 
     image.delete()
     print("[SUCCESS] Extracted properties to: " + out_path)
+
+
+    #Run through all files
+    #gimp -i --quit --batch-interpreter python-fu-eval -b "import sys; sys.path.append('src'); import parse_xcf; parse_xcf.parse_all_files()"
+    def parse_all_files():
+    ###Loops through all .xcf files in data/edited/ and extracts GEGL parameters.
+        project_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..")
+        )
+        edited_dir = os.path.join(project_root, "data", "edited")
+
+        if not os.path.exists(edited_dir):
+            print(f"[ERROR] Directory not found: {edited_dir}")
+            return
+
+        xcf_files = [f for f in os.listdir(edited_dir) if f.endswith(".xcf")]
+        print(f"[INFO] Found {len(xcf_files)} .xcf files to process...")
+
+        for xcf_name in xcf_files:
+            full_path = os.path.join(edited_dir, xcf_name)
+            try:
+                parse_single_file(full_path)
+            except Exception as e:
+                print(f"[ERROR] Failed to parse {xcf_name}: {e}")
