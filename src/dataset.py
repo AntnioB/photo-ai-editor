@@ -1,30 +1,57 @@
 #imports
-import oss
+import os
+import config
 
-#variables
-rawList = []
-editedList= []
+from PIL import Image
+import torch
+from torchvision import transforms
 
-#File Matching & Indexing: Scans your raw and edited folders, verifies both images exist for every pair, and builds an indexed master list of matching file paths based on filenames.
-with os.scandir('../data/raw') as d:
-    for e in d:
-        rawList.append(e.name)
+#File Indexing & Pairing: Scans your raw image directory, finds matching _params.json files in data/processed/, and builds a validated list of (image_path, json_path) tuples while filtering out any missing or corrupt files.
+processed_files = set(os.listdir(config.PROCESSED_DATA_DIR))
+valid_list = []
+
+with os.scandir(config.RAW_DATA_DIR) as entries:
+    for entry in entries:
+        # 1. Check if it's a file and has an image extension
+        if entry.is_file() and entry.name.lower().endswith(
+            (".jpg", ".jpeg", ".png")
+        ):
+
+            # 2. Derive expected JSON filename
+            base_name = os.path.splitext(entry.name)[0]
+            expected_json = f"{base_name}_params.json"
+
+            # 3. Verify matching JSON exists in set
+            if expected_json in processed_files:
+                img_path = os.path.join(config.RAW_DATA_DIR, entry.name)
+                json_path = os.path.join(
+                    config.PROCESSED_DATA_DIR, expected_json
+                )
+                valid_list.append((img_path, json_path))
+            
+
+#Input Image Pipeline: Loads raw image files, applies standard spatial transforms (resizing, cropping, PyTorch ToTensor conversion), and normalizes pixel ranges (e.g., standard ImageNet mean and standard deviation) to output clean [C, H, W] image tensors.
+
+class PhotoTransformPipeline:
+    def __init__(self, img_size=(config.IMAGE_SIZE)):
+        self.transform = transforms.Compose(
+            [
+                transforms.Resize(img_size),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
     
-with os.scandir('../data/edited') as d:
-    for e in d:
-        editedList.append(e.name)
+    def load_and_process(self, img_path:str) -> torch.Tensor:
+        # .convert("RGB") enforces 3 channels, discarding RGBA alphas or expanding 1-channel grayscales
+        with Image.open(img_path) as img:
+            img_rgb = img.convert('RGB')
+            return self.transform(img_rgb)
 
-if rawList.count() == editedList.count():
-    raise Exception("Raw number of images does not match edited number of images")
+#Target Vector Construction: Parses each sample's JSON file to extract the 8-filter GEGL stack, flattening the relevant opacities and numerical slider properties into a single 1D target FloatTensor ($\vec{\theta}$).
 
+#Parameter Normalization: Scales disparate slider ranges (e.g., Colour Temperature in Kelvin vs. Exposure EV steps) into unified bounds like $[0, 1]$ or $[-1, 1]$ so large numbers don't overwhelm model gradients during loss calculation.
 
-
-#Image Loading: Reads the unedited JPEG and the corresponding edited target image into memory using Python libraries like Pillow or OpenCV.
-
-#Spatial Resizing & Alignment: Downsamples both images to a uniform resolution (such as $256 \times 256$) so they can be grouped into fixed-size training batches, ensuring identical aspect ratios via consistent cropping or letterboxing.
-
-#Tensor Conversion & Normalization: Converts image arrays into PyTorch Tensors and scales RGB pixel values from standard $0\text{--}255$ integers into a normalized $0.0\text{--}1.0$ floating-point range.
-
-#Synchronized Data Augmentation: Applies identical random transformations (such as horizontal flips or minor rotations) to both the unedited image and the target edit simultaneously during training to artificially expand your dataset size.
-
-#PyTorch Dataset Hooks: Provides the required internal methods—one to report the total count of paired images, and another to retrieve a single preprocessed (unedited_tensor, edited_tensor, metadata) item by index.
+#PyTorch Dataset Interface: Implements __len__ to return total valid sample counts and __getitem__ to return the (input_image_tensor, target_parameter_tensor) tuple required by PyTorch DataLoader batching.
