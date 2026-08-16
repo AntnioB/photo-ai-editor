@@ -16,13 +16,16 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs"
 for folder in [RAW_DATA_DIR, EDITED_DATA_DIR, PROCESSED_DATA_DIR, CHECKPOINT_DIR, OUTPUT_DIR]:
     folder.mkdir(parents=True, exist_ok=True)
 
+
+IMG_SIZE = [256, 256]
+
 # Strict layer stack enforcement (lowest to highest)
 LAYER_STACK = [
     "Exposure",
     "Shadows-Highlights",
     "Levels",
     "Colour Temperature",
-    "Curves",
+    #"Curves", #IGNORED FOR NOW
     "Sharpen (Unsharp Mask)",
     "Noise Reduction",
     "Vignette"
