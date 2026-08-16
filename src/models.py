@@ -22,7 +22,7 @@ class PhotoParamRegressor(nn.Module):
             nn.ReLU(),
             nn.Dropout(0.2),
             nn.Linear(256, num_target_params),
-            nn.Sigmoid() #Maps outputs strictlyu to [0.0, 1.0]
+            nn.Sigmoid() #Maps outputs strictly to [0.0, 1.0]
         )
 
     
