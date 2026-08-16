@@ -11,8 +11,8 @@ TARGET_FILTERS = [
     "Shadows-Highlights",
     "Levels",
     "Colour Temperature",
-    "Curves",
-    "Sharpen (Unsharpen Mask)",
+    #"Curves",#IGNORED FOR NOW
+    "Sharpen (Unsharp Mask)",
     "Noise Reduction",
     "Vignette",
 ]
@@ -65,11 +65,43 @@ def extract_filter_properties(flt):
 
     return properties
 
+#NOT WORKING AS INTENDED FIX AT A LATER STAGE
+def extract_curve_samples(flt, num_points=5):
+    """Samples Y values from a Curves filter across uniform X intervals."""
+    config = flt.get_config() if hasattr(flt, "get_config") else None
+    if config and hasattr(config, "get_property"):
+        try:
+            curve = config.get_property("curve")
+            if curve:
+                samples = {}
+                for i in range(num_points):
+                    x = i / (num_points - 1)
+                    y = None
+                    # Attempt safe evaluation across GimpCurve methods
+                    for method_name in ["eval_at_offset", "eval", "get_y_at_x"]:
+                        if hasattr(curve, method_name):
+                            try:
+                                y = getattr(curve, method_name)(x)
+                                break
+                            except Exception:
+                                pass
+                    if y is None:
+                        y = x
+                    samples[f"p{i}_y"] = round(float(y), 4)
+                return samples
+        except Exception:
+            pass
+
+    # Default identity curve fallback: Y = X
+    return {
+        f"p{i}_y": round(i / (num_points - 1), 4) for i in range(num_points)
+    }
+
 
 #Run on a single file
 #gimp -i --quit --batch-interpreter python-fu-eval -b "import sys; sys.path.append('src'); import parse_xcf; parse_xcf.parse_single_file('data/edited/edit_3753.xcf')"
 def parse_single_file(xcf_path):
-    """Extracts DrawableFilter slider parameters into data/processed/*.json."""
+    """Extracts GEGL filter slider parameters and curve points into JSON."""
     project_root = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..")
     )
@@ -83,7 +115,6 @@ def parse_single_file(xcf_path):
     layers = image.get_layers()
     base_layer = layers[0] if len(layers) > 0 else None
 
-    # Index attached filters by name
     attached_filters = {}
     if base_layer and hasattr(base_layer, "get_filters"):
         for flt in base_layer.get_filters():
@@ -97,9 +128,15 @@ def parse_single_file(xcf_path):
             flt = attached_filters[filter_name]
             is_enabled = get_filter_enabled(flt)
             opacity = get_filter_opacity(flt)
+
+            # 1. Standard scalar properties
             props = extract_filter_properties(flt)
 
-            # Store opacity in parameter vector
+            # 2. Directly extract 5-point curve samples if this is Curves
+            if filter_name == "Curves":
+                curve_samples = extract_curve_samples(flt, num_points=5)
+                props.update(curve_samples)
+
             param_vector.append(opacity if is_enabled else 0.0)
             filter_metadata[filter_name] = {
                 "index": idx,
@@ -128,28 +165,28 @@ def parse_single_file(xcf_path):
         json.dump(output_data, f, indent=4)
 
     image.delete()
-    print("[SUCCESS] Extracted properties to: " + out_path)
+    print("[SUCCESS] Extracted properties with 5-point curve to: " + out_path)
 
 
-    #Run through all files
-    #gimp -i --quit --batch-interpreter python-fu-eval -b "import sys; sys.path.append('src'); import parse_xcf; parse_xcf.parse_all_files()"
-    def parse_all_files():
+#Run through all files
+#gimp -i --quit --batch-interpreter python-fu-eval -b "import sys; sys.path.append('src'); import parse_xcf; parse_xcf.parse_all_files()"
+def parse_all_files():
     ###Loops through all .xcf files in data/edited/ and extracts GEGL parameters.
-        project_root = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..")
-        )
-        edited_dir = os.path.join(project_root, "data", "edited")
+    project_root = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..")
+    )
+    edited_dir = os.path.join(project_root, "data", "edited")
 
-        if not os.path.exists(edited_dir):
-            print(f"[ERROR] Directory not found: {edited_dir}")
-            return
+    if not os.path.exists(edited_dir):
+        print(f"[ERROR] Directory not found: {edited_dir}")
+        return
 
-        xcf_files = [f for f in os.listdir(edited_dir) if f.endswith(".xcf")]
-        print(f"[INFO] Found {len(xcf_files)} .xcf files to process...")
+    xcf_files = [f for f in os.listdir(edited_dir) if f.endswith(".xcf")]
+    print(f"[INFO] Found {len(xcf_files)} .xcf files to process...")
 
-        for xcf_name in xcf_files:
-            full_path = os.path.join(edited_dir, xcf_name)
-            try:
-                parse_single_file(full_path)
-            except Exception as e:
-                print(f"[ERROR] Failed to parse {xcf_name}: {e}")
+    for xcf_name in xcf_files:
+        full_path = os.path.join(edited_dir, xcf_name)
+        try:
+            parse_single_file(full_path)
+        except Exception as e:
+            print(f"[ERROR] Failed to parse {xcf_name}: {e}")
