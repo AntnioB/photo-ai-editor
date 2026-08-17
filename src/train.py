@@ -26,7 +26,7 @@ class MaskedParamLoss(nn.Module):
         loss_matrix = self.mse(pred, target)
 
         #Return mean loss across the batch
-        total_loss - loss_matrix.mean()
+        total_loss = loss_matrix.mean()
         return total_loss
 
 
