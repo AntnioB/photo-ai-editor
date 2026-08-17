@@ -58,10 +58,10 @@ PARAM_BOUNDS = {
     # filter opacity / active status serves as the scalar target.
     # discrete Y-axis output points for the RGB curve
     #IGNORED FOR NOW
-    # 6. Sharpen (Unsharpen Mask)
-    ("Sharpen (Unsharpen Mask)", "std-dev"): (0.0, 10.0),
-    ("Sharpen (Unsharpen Mask)", "scale"): (0.0, 3.0),
-    ("Sharpen (Unsharpen Mask)", "threshold"): (0.0, 1.0),
+    # 6. Sharpen (Unsharp Mask)
+    ("Sharpen (Unsharp Mask)", "std-dev"): (0.0, 10.0),
+    ("Sharpen (Unsharp Mask)", "scale"): (0.0, 3.0),
+    ("Sharpen (Unsharp Mask)", "threshold"): (0.0, 1.0),
     # 7. Noise Reduction
     ("Noise Reduction", "iterations"): (1.0, 10.0),
     # 8. Vignette
