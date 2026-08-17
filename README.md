@@ -17,6 +17,7 @@ photo-AI-editor/
 │   └── parse_xcf.py      # Script which parses GEGL parameters into a JSON file to be used in training
 ├── checkpoints/          # Model weights (.pth)
 └── data/                 # Raw images and ground-truth/predicted JSONs
+```
 
 ### Model Pipeline Overview
 * **Backbone Feature Extractor:** Pre-trained ResNet-18 maps input images ($3 \times 256 \times 256$) to a 512-dimensional feature embedding.
